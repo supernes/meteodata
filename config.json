@@ -1,0 +1,21 @@
+{
+  "mqtt": {
+    "host": "",
+    "port": 9001,
+    "secure": false,
+    "endpoint": "mqtt",
+    "username": "",
+    "password": "",
+    "topic": "v1/meteodata/things/AT31557375/data/"
+  },
+  "database": {
+    "path": "./db/meteodata.db",
+    "filter_fields": [7, 8, 9, 10, 18, 23, 24, 38, 39]
+  },
+  "webapp": {
+    "port": 3456
+  },
+  "log": {
+    "level": "info"
+  }
+}
