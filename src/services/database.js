@@ -1,81 +1,62 @@
-import { logger } from "../common.js";
-import sqlite3 from "sqlite3"
+import { logger } from '../common.js'
+import Database from 'better-sqlite3'
 
 export class MeteoDatabase {
-  db
   config
-  isOpen = false
-
+  db
+  
   /**
-   * @type { {[n: string]: sqlite3.Statement} }
+   * @type {{[k: string]: Database.Statement}}
    */
-  statements = {}
+  stmts = {}
 
   constructor(config) {
     this.config = config;
 
-    this.db = new sqlite3.Database(this.config.path, error => {
-      if (error != null) {
-        logger.error("Failed to open database", { path: this.config.path });
-        this.db = null;
-        return;
-      }
+    try {
+      this.db = new Database(config.path);
+    } catch (error) {
+      logger.error("Failed to open database", { error });
+    }
 
-      process.on('beforeExit', () => {
-        if (this.db) {
-          this.db.close()
-        }
-      });
+    process.on('exit', () => this.db?.close());
 
-      this.db.on('open', () => {
-        logger.info("Database opened", { path: this.config.path });
-        this.#prepareStatements();
-      });
-
-      this.db.on('close', () => {
-        logger.debug("Database closed", { path: this.config.path })
-      });
-
-      this.db.on('error', error => {
-        if (error !== null) {
-          logger.error("Databsae error", { error });
-        }
-      });
-    });
+    this.#prepareStatements();
   }
 
   #prepareStatements() {
-    this.db.serialize(() => {
-      // Ensure schema
-      this.db.run(`CREATE TABLE IF NOT EXISTS "meteodata" (
+    if (!this.db) {
+      return;
+    }
+
+    // const { exec, prepare } = this.db;
+
+    // Ensure schema
+
+    try {
+      this.db.exec(`CREATE TABLE IF NOT EXISTS "meteodata" (
         "ts"	INTEGER NOT NULL,
         "field"	INTEGER NOT NULL,
         "prop"	TEXT,
         "value"	TEXT
       )`);
 
-      this.db.run(`CREATE INDEX IF NOT EXISTS "ts_ix" ON "meteodata" ("ts")`);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS "ts_ix" ON "meteodata" ("ts")`);
+    } catch (error) {
+      logger.error("Failed to prepare database schema", { error });
+      return;
+    }
 
-      // Prepare queries
-      this.statements['insert'] = this.db.prepare(`INSERT INTO "meteodata" VALUES(unixepoch(), ?, ?, ?)`);
-
-      this.statements['get_latest'] = this.db.prepare(`select ts, field, value
-        from "meteodata"
-          inner join (
-            select max(ts) as ts, field
-            from "meteodata"
-            group by field
-          ) using (field, ts)
-        order by field asc`);
-
-      this.statements['get_lasthour'] = this.db.prepare(`select "field", avg("value") as "value"
-        from "meteodata"
-        where "ts" >= unixepoch() - 3600
-        group by "field"`);
-    });
+    try {
+      this.stmts['insert'] = this.db.prepare(`INSERT INTO "meteodata" VALUES(unixepoch(), ?, ?, ?)`);
+      this.stmts['lasthour'] = this.db.prepare(`SELECT "field", avg("value") as "value"
+        FROM "meteodata"
+        WHERE "ts" >= unixepoch() - 3600
+        GROUP BY "field"`);
+    } catch (error) {
+      logger.error("Database statement preparation failed", { error });
+    }
   }
-
-  //
 
   /**
    * 
@@ -85,60 +66,30 @@ export class MeteoDatabase {
    */
   insertMeasurement(field, prop, value) {
     if (!this.db) {
+      logger.error("Database not opened", { ctx: 'insertMeasurement' });
+      return false;
+    }
+
+    try {
+      this.stmts['insert'].run(field, prop, value);
+      return true;
+    } catch (error) {
+      logger.warn("SQL INSERT failed", { error });
+      return false;
+    }
+  }
+
+  getLastHourAverage() {
+    if (!this.db) {
+      logger.error("Database not opened", { ctx: 'getLastHourAverage' });
       return;
     }
 
-    const stmt = this.statements['insert'];
-
-    if (stmt) {
-      stmt.run([field, prop, value], function (error) {
-        if (error) {
-          logger.error('Problem with insert query, params', {
-            params: [field, prop, value], error
-          });
-        }
-      });
+    try {
+      return this.stmts['lasthour'].all();
+    } catch (error) {
+      logger.warn("SQL SELECT for hourly average failed", { error });
+      return [];
     }
   }
-
-  async getLatest() {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        reject(new Error('Database not initialized'));
-        return;
-      }
-
-      this.db.serialize(() => {
-        this.statements['get_latest'].all((error, rows) => {
-          if (error) {
-            logger.warn('Failed to get latest measurements', { error });
-            reject(error);
-          } else {
-            resolve(rows);
-          }
-        });
-      });
-    });
-  }
-
-  async getLastHourAverage() {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        reject(new Error('Database not initialized'));
-        return;
-      }
-
-      this.db.serialize(() => {
-        this.statements['get_lasthour'].all((error, rows) => {
-          if (error) {
-            logger.warn('Failed to get hourly average', { error });
-            reject(error);
-          } else {
-            resolve(rows);
-          }
-        });
-      });
-    });
-  }
-
 }
