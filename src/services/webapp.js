@@ -26,9 +26,13 @@ export function createWebApp(database) {
     try {
       const data = await database.getLastHourAverage();
       ctx.body = formatLHResponse(data);
+
+      logger.verbose("HTTP response OK", { url: "/lasthour" });
     } catch (error) {
       ctx.status = 500;
       ctx.body = formatLHResponse([]);
+
+      logger.warn("HTTP server error", { error });
     }
   });
 

@@ -38,7 +38,6 @@ export class MeteoClient {
 
       process.on('beforeExit', (code) => {
         if (this.#client) {
-          console.log('Shutting down mqtt client');
           this.#client.end();
         }
       })
@@ -55,6 +54,8 @@ export class MeteoClient {
       for (const cb of this.#callbacks) {
         cb(topic_short, payload_str);
       }
+
+      logger.verbose('MQTT client got message', { topic: topic_short });
     });
 
     this.#client.on('error', (error) => {

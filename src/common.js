@@ -1,7 +1,12 @@
 import fs from 'fs'
-import * as winston from 'winston'
 
-const { combine, timestamp, prettyPrint } = winston.format;
+import { createLogger, format, transports } from 'winston'
+const { timestamp, colorize, combine } = format;
+
+import 'winston-daily-rotate-file'
+
+import { MESSAGE } from 'triple-beam'
+import jsonStringify from 'safe-stable-stringify'
 
 // Error constants
 
@@ -35,13 +40,57 @@ try {
 
 // Logging
 
-export const logger = winston.createLogger({
-  level: config.log?.level ?? 'info',
-  format: combine(timestamp(),
-    prettyPrint({
-      colorize: true
-    })),
-  transports: [
-    new winston.transports.Console()
-  ]
+const customFileFormat = format((info, opts) => {
+  const stringifiedRest = jsonStringify(Object.assign({}, info, {
+    level: undefined,
+    message: undefined,
+    splat: undefined,
+    timestamp: undefined
+  }));
+
+  info[MESSAGE] = `${info.timestamp} [${info.level}] ${info.message} ` + (stringifiedRest !== '{}'
+    ? stringifiedRest
+    : '');
+
+  return info;
 });
+
+/**
+ * @type winston.LoggerOptions
+ */
+let loggerOptions = {
+  level: config.log?.level ?? 'info'
+};
+
+if (process.env.NODE_ENV === 'development') {
+  loggerOptions = {
+    ...loggerOptions,
+    transports: [
+      new transports.Console({
+        format: combine(
+          timestamp(),
+          colorize(),
+          customFileFormat()
+        )
+      })
+    ]
+  };
+} else {
+  loggerOptions = {
+    ...loggerOptions,
+    transports: [
+      new transports.DailyRotateFile({
+        frequency: '72h',
+        filename: 'meteodata-%DATE%.log',
+        dirname: './log',
+        maxFiles: 3,
+        format: format.combine(
+          timestamp(),
+          customFileFormat()
+        )
+      })
+    ]
+  };
+}
+
+export const logger = createLogger(loggerOptions);

@@ -23,7 +23,6 @@ export class MeteoDatabase {
 
       process.on('beforeExit', () => {
         if (this.db) {
-          console.log('Closing down database')
           this.db.close()
         }
       });
@@ -97,8 +96,6 @@ export class MeteoDatabase {
           logger.error('Problem with insert query, params', {
             params: [field, prop, value], error
           });
-        } else {
-          logger.verbose('Insert OK', { changes: this.changes || "?" })
         }
       });
     }
