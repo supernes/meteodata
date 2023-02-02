@@ -22,6 +22,8 @@ export class MeteoDatabase {
     process.on('exit', () => this.db?.close());
 
     this.#prepareStatements();
+
+    logger.info("Database opened", { path: config.path });
   }
 
   #prepareStatements() {

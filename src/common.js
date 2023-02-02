@@ -12,8 +12,7 @@ import jsonStringify from 'safe-stable-stringify'
 
 export const errors = {
   CONFIG_MISSING: -1,
-  CONFIG_INVALID: -2,
-  SERVER_INIT_FAIL: -3,
+  CONFIG_INVALID: -2
 }
 
 // Configuration
@@ -59,38 +58,30 @@ const customFileFormat = format((info, opts) => {
  * @type winston.LoggerOptions
  */
 let loggerOptions = {
-  level: config.log?.level ?? 'info'
+  transports: [
+    new transports.DailyRotateFile({
+      frequency: '72h',
+      filename: 'meteodata-%DATE%.log',
+      dirname: './log',
+      maxFiles: 3,
+      level: config.log?.level ?? 'info',
+      format: format.combine(
+        timestamp(),
+        customFileFormat()
+      )
+    })
+  ]
 };
 
 if (process.env.NODE_ENV === 'development') {
-  loggerOptions = {
-    ...loggerOptions,
-    transports: [
-      new transports.Console({
-        format: combine(
-          timestamp(),
-          colorize(),
-          customFileFormat()
-        )
-      })
-    ]
-  };
-} else {
-  loggerOptions = {
-    ...loggerOptions,
-    transports: [
-      new transports.DailyRotateFile({
-        frequency: '72h',
-        filename: 'meteodata-%DATE%.log',
-        dirname: './log',
-        maxFiles: 3,
-        format: format.combine(
-          timestamp(),
-          customFileFormat()
-        )
-      })
-    ]
-  };
+  loggerOptions.transports.push(new transports.Console({
+    level: 'debug',
+    format: combine(
+      timestamp(),
+      colorize(),
+      customFileFormat()
+    )
+  }));
 }
 
 export const logger = createLogger(loggerOptions);

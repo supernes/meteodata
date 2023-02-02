@@ -26,7 +26,8 @@ export class MeteoClient {
       username,
       password,
 
-      queueQoSZero: false
+      queueQoSZero: false,
+      reconnectPeriod: 10 * 60 * 1000
     });
 
     this.#client.on('connect', () => {
@@ -36,11 +37,7 @@ export class MeteoClient {
 
       this.#client.subscribe(topic + '+');
 
-      process.on('beforeExit', (code) => {
-        if (this.#client) {
-          this.#client.end();
-        }
-      })
+      process.on('exit', () => this.#client?.end());
     });
 
     this.#client.on('disconnect', () => {
